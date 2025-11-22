@@ -1,133 +1,156 @@
-# =============================================================================
-# MEMBER 3 - Speech-to-Text Service (Phase 1)
-# =============================================================================
+# =========================================================================
+# STT Service Resources
+# =========================================================================
 
+# =========================================================================
+# 1. Security & Permissions
+# =========================================================================
 
-# ------------------ INPUTS ------------------
-variable "vpc_id" { type = string }
-variable "db_password" {
-  type      = string
-  sensitive = true
-  description = "Never commit real password"
-}
-
-# ------------------ DATA ------------------
-data "aws_caller_identity" "current" {}
-data "aws_vpc" "selected" { id = var.vpc_id }
-data "aws_subnets" "private" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.selected.id]
-  }
-}
-data "aws_iam_role" "lab_role" { name = "LabRole" }
-
-# ------------------ RANDOM FOR UNIQUENESS ------------------
-resource "random_string" "suffix" {
-  length  = 8
-  special = false
-  upper   = false
-}
-
-# ------------------ S3 BUCKET (FIXED) ------------------
-resource "aws_s3_bucket" "stt_bucket" {
-  bucket        = "stt-service-storage-${data.aws_caller_identity.current.account_id}-${random_string.suffix.result}"
-  force_destroy = true
-}
-
-resource "aws_s3_bucket_versioning" "versioning" {
-  bucket = aws_s3_bucket.stt_bucket.id
-  versioning_configuration { status = "Enabled" }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "enc" {
-  bucket = aws_s3_bucket.stt_bucket.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "block" {
-  bucket                  = aws_s3_bucket.stt_bucket.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# ------------------ RDS SECURITY GROUP ------------------
+# --- RDS Security Group (Sec 2.8 & 5.2) ---
 resource "aws_security_group" "stt_db_sg" {
-  name   = "stt-db-sg"
-  vpc_id = data.aws_vpc.selected.id
+  name        = "stt-db-sg"
+  vpc_id      = aws_vpc.hydra_vpc.id
+  description = "Security group for STT Service RDS"
+
   ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.selected.cidr_block]
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
   }
+
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = { Name = "stt-db-sg" }
 }
 
-resource "aws_db_subnet_group" "stt_subnet_group" {
-  name       = "stt-db-subnet-group"
-  subnet_ids = data.aws_subnets.private.ids
-}
+# --- IAM Role (Sec 2.1) ---
+resource "aws_iam_role" "stt_service_role" {
+  name = "stt-service-role"
 
-# ------------------ RDS (COST-OPTIMIZED) ------------------
-resource "aws_db_instance" "stt_db" {
-  identifier              = "stt-service-db"
-  engine                  = "postgres"
-  engine_version          = "18.1"
-  instance_class          = "db.t3.medium"
-  allocated_storage       = 20
-  max_allocated_storage   = 20
-  storage_encrypted       = true
-  username                = "stt_admin"
-  password                = var.db_password
-  db_name                 = "stt_db"
-  multi_az                = false
-  backup_retention_period = 0
-  skip_final_snapshot     = true
-  publicly_accessible     = false
-  apply_immediately       = true
-
-  db_subnet_group_name    = aws_db_subnet_group.stt_subnet_group.name
-  vpc_security_group_ids  = [aws_security_group.stt_db_sg.id]
-}
-
-# ------------------ IAM POLICY (THE MISSING PART!) ------------------
-resource "aws_iam_policy" "stt_service_policy" {
-  name = "STT-Service-Policy"
-  policy = jsonencode({
+  assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"]
-        Resource = [
-          aws_s3_bucket.stt_bucket.arn,
-          "${aws_s3_bucket.stt_bucket.arn}/*"
-        ]
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com" # Assuming EC2/App layer needs this role
+        }
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "attach" {
-  role       = data.aws_iam_role.lab_role.name
+resource "aws_iam_policy" "stt_service_policy" {
+  name        = "stt-service-policy"
+  description = "Policy for STT Service to access S3 and RDS"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.stt_storage.arn,
+          "${aws_s3_bucket.stt_storage.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-db:connect"
+        ]
+        Resource = aws_db_instance.stt_db.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "stt_service_attach" {
+  role       = aws_iam_role.stt_service_role.name
   policy_arn = aws_iam_policy.stt_service_policy.arn
 }
 
-# ------------------ OUTPUTS ------------------
-output "s3_bucket_name" { value = aws_s3_bucket.stt_bucket.id }
-output "db_endpoint"    { value = aws_db_instance.stt_db.endpoint }
+# =========================================================================
+# 2. S3 Buckets (Sec 2.4)
+# =========================================================================
 
-output "db_sg_id"       { value = aws_security_group.stt_db_sg.id }
+resource "aws_kms_key" "stt_key" {
+  description             = "Key for STT bucket encryption"
+  deletion_window_in_days = 10
+}
 
+resource "aws_s3_bucket" "stt_storage" {
+  bucket = "stt-service-storage-dev-56-${random_id.bucket_suffix.hex}"
+  tags   = { Name = "STT Service Storage" }
+}
+
+resource "aws_s3_bucket_versioning" "stt_storage_versioning" {
+  bucket = aws_s3_bucket.stt_storage.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "stt_storage_encryption" {
+  bucket = aws_s3_bucket.stt_storage.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.stt_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "stt_storage_lifecycle" {
+  bucket = aws_s3_bucket.stt_storage.id
+
+  rule {
+    id     = "MoveToIA"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+
+# =========================================================================
+# 3. RDS Database (Sec 2.8 & 5.2)
+# =========================================================================
+
+resource "aws_db_instance" "stt_db" {
+  identifier        = "stt-db"
+  allocated_storage = 20
+  storage_type      = "gp3"
+  engine            = "postgres"
+  engine_version    = "18.1"
+  instance_class    = "db.t3.medium"
+  db_name           = "sttdb"
+  username          = "sttadmin"
+  password          = "RAGNAROK9090!"
+
+  # Networking
+  db_subnet_group_name   = aws_db_subnet_group.quiz_db_subnet_group.name # Reusing subnet group from quizservice.tf as it uses the same 'data_db' subnets
+  vpc_security_group_ids = [aws_security_group.stt_db_sg.id]
+
+  # Availability & Durability
+  multi_az                = true
+  publicly_accessible     = false
+  storage_encrypted       = true
+  skip_final_snapshot     = true
+  backup_retention_period = 7
+}

@@ -4,7 +4,7 @@
 
 # --- RDS Security Group (Sec 2.8) ---
 # Allows traffic only from the App Layer
- resource "aws_security_group" "quiz_db_sg" {
+resource "aws_security_group" "quiz_db_sg" {
   name        = "quiz-db-sg"
   vpc_id      = aws_vpc.hydra_vpc.id # References VPC from main.tf
   description = "Security group for Quiz Service RDS"
@@ -186,10 +186,10 @@ resource "aws_db_subnet_group" "quiz_db_subnet_group" {
 
 resource "aws_db_instance" "quiz_db" {
   identifier        = "quiz-service-db" # [cite: 4]
-  allocated_storage = 1                # [cite: 7]
+  allocated_storage = 20                # [cite: 7]
   storage_type      = "gp3"             # [cite: 7]
   engine            = "postgres"        # [cite: 7]
-  engine_version    = "18.1"         # Compatible Postgres version
+  engine_version    = "18.1"            # Compatible Postgres version
   instance_class    = "db.t3.medium"    # [cite: 7]
   db_name           = "quizdb"          # [cite: 6]
   username          = "quizadmin"       # [cite: 7]
@@ -225,4 +225,4 @@ output "quiz_db_password" {
   description = "Auto-generated password for the RDS instance"
   value       = random_password.db_pass.result
   sensitive   = true
-} 
+}

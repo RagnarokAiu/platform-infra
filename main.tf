@@ -8,7 +8,7 @@ provider "aws" {
 # ==========  ===============================================================
 # 1. VPC & Network Foundation [cite: 3, 4]
 # =========================================================================
- 
+
 resource "aws_vpc" "hydra_vpc" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -144,8 +144,8 @@ resource "aws_route_table_association" "kafka_assoc" {
 # =========================================================================
 
 resource "aws_security_group" "alb_sg" {
-  name   = "alb-sg"
-  vpc_id = aws_vpc.hydra_vpc.id
+  name        = "alb-sg"
+  vpc_id      = aws_vpc.hydra_vpc.id
   description = "Allow Public HTTP Access"
 
   ingress {
@@ -163,8 +163,8 @@ resource "aws_security_group" "alb_sg" {
 }
 
 resource "aws_security_group" "app_sg" {
-  name   = "app-cluster-sg"
-  vpc_id = aws_vpc.hydra_vpc.id
+  name        = "app-cluster-sg"
+  vpc_id      = aws_vpc.hydra_vpc.id
   description = "Security group for Application Containers"
 
   ingress {
@@ -182,8 +182,8 @@ resource "aws_security_group" "app_sg" {
 }
 
 resource "aws_security_group" "kafka_sg" {
-  name   = "kafka-sg"
-  vpc_id = aws_vpc.hydra_vpc.id
+  name        = "kafka-sg"
+  vpc_id      = aws_vpc.hydra_vpc.id
   description = "Security group for Kafka and Zookeeper"
 
   # Allow internal communication within the SG (Kafka <-> Zookeeper)
@@ -200,7 +200,7 @@ resource "aws_security_group" "kafka_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.app_sg.id]
   }
-    # Allow SSH for management (Internal Only)
+  # Allow SSH for management (Internal Only)
   ingress {
     from_port   = 22
     to_port     = 22
@@ -248,12 +248,12 @@ data "aws_ami" "amazon_linux_2023" {
 
 # --- App Nodes (3 Instances) [cite: 73] ---
 resource "aws_instance" "app_nodes" {
-  count                  = 3
-  ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = "t3.medium" # 
-  subnet_id              = element(aws_subnet.private_app[*].id, count.index) # Distributes across AZs
-  key_name               = aws_key_pair.kp.key_name
-  vpc_security_group_ids = [aws_security_group.app_sg.id]
+  count                       = 3
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = "t3.medium"                                        # 
+  subnet_id                   = element(aws_subnet.private_app[*].id, count.index) # Distributes across AZs
+  key_name                    = aws_key_pair.kp.key_name
+  vpc_security_group_ids      = [aws_security_group.app_sg.id]
   associate_public_ip_address = false # [cite: 79]
 
   tags = { Name = "App-Node-${count.index + 1}" }
@@ -261,12 +261,12 @@ resource "aws_instance" "app_nodes" {
 
 # --- Kafka Brokers (3 Instances) [cite: 70] ---
 resource "aws_instance" "kafka_brokers" {
-  count                  = 3
-  ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = "t3.medium"
-  subnet_id              = element(aws_subnet.kafka_cluster[*].id, count.index)
-  key_name               = aws_key_pair.kp.key_name
-  vpc_security_group_ids = [aws_security_group.kafka_sg.id]
+  count                       = 3
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = "t3.medium"
+  subnet_id                   = element(aws_subnet.kafka_cluster[*].id, count.index)
+  key_name                    = aws_key_pair.kp.key_name
+  vpc_security_group_ids      = [aws_security_group.kafka_sg.id]
   associate_public_ip_address = false
 
   tags = { Name = "Kafka-Broker-${count.index + 1}" }
@@ -274,12 +274,12 @@ resource "aws_instance" "kafka_brokers" {
 
 # --- Zookeeper Nodes (3 Instances) [cite: 70] ---
 resource "aws_instance" "zookeeper_nodes" {
-  count                  = 3
-  ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = "t3.medium"
-  subnet_id              = element(aws_subnet.kafka_cluster[*].id, count.index)
-  key_name               = aws_key_pair.kp.key_name
-  vpc_security_group_ids = [aws_security_group.kafka_sg.id]
+  count                       = 3
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = "t3.medium"
+  subnet_id                   = element(aws_subnet.kafka_cluster[*].id, count.index)
+  key_name                    = aws_key_pair.kp.key_name
+  vpc_security_group_ids      = [aws_security_group.kafka_sg.id]
   associate_public_ip_address = false
 
   tags = { Name = "Zookeeper-${count.index + 1}" }
