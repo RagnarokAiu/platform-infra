@@ -6,7 +6,7 @@
 # 1. Security & Permissions
 # =========================================================================
 
-# --- RDS Security Group (Sec 2.8 & 5.2) ---
+# --- RDS Security Group ---
 resource "aws_security_group" "stt_db_sg" {
   name        = "stt-db-sg"
   vpc_id      = aws_vpc.hydra_vpc.id
@@ -29,7 +29,8 @@ resource "aws_security_group" "stt_db_sg" {
   tags = { Name = "stt-db-sg" }
 }
 
-# --- IAM Role (Sec 2.1) ---
+/*
+# --- IAM Role ---
 resource "aws_iam_role" "stt_service_role" {
   name = "stt-service-role"
 
@@ -81,9 +82,10 @@ resource "aws_iam_role_policy_attachment" "stt_service_attach" {
   role       = aws_iam_role.stt_service_role.name
   policy_arn = aws_iam_policy.stt_service_policy.arn
 }
+*/
 
 # =========================================================================
-# 2. S3 Buckets (Sec 2.4)
+# 2. S3 Buckets
 # =========================================================================
 
 resource "aws_kms_key" "stt_key" {
@@ -129,7 +131,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "stt_storage_lifecycle" {
 }
 
 # =========================================================================
-# 3. RDS Database (Sec 2.8 & 5.2)
+# 3. RDS Database
 # =========================================================================
 
 resource "aws_db_instance" "stt_db" {

@@ -6,7 +6,7 @@
 # 1. Security & Permissions
 # =========================================================================
 
-# --- RDS Security Group (Sec 2.8) ---
+# --- RDS Security Group ---
 resource "aws_security_group" "doc_reader_db_sg" {
   name        = "doc-reader-db-sg"
   vpc_id      = aws_vpc.hydra_vpc.id
@@ -29,7 +29,8 @@ resource "aws_security_group" "doc_reader_db_sg" {
   tags = { Name = "doc-reader-db-sg" }
 }
 
-# --- IAM Role (Sec 2.1) ---
+/*
+# --- IAM Role ---
 resource "aws_iam_role" "document_reader_role" {
   name = "document-reader-role"
 
@@ -81,9 +82,10 @@ resource "aws_iam_role_policy_attachment" "document_reader_attach" {
   role       = aws_iam_role.document_reader_role.name
   policy_arn = aws_iam_policy.document_reader_policy.arn
 }
+*/
 
 # =========================================================================
-# 2. S3 Buckets (Sec 2.4)
+# 2. S3 Buckets
 # =========================================================================
 
 resource "aws_kms_key" "doc_reader_key" {
@@ -129,7 +131,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "document_reader_storage_lifecy
 }
 
 # =========================================================================
-# 3. RDS Database (Sec 2.8)
+# 3. RDS Database
 # =========================================================================
 
 resource "aws_db_instance" "document_reader_db" {
