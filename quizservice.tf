@@ -225,4 +225,4 @@ output "quiz_db_password" {
   description = "Auto-generated password for the RDS instance"
   value       = random_password.db_pass.result
   sensitive   = true
-}
+} 
