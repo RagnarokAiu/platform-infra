@@ -1,11 +1,5 @@
-# =========================================================================
 # STT Service Resources
-# =========================================================================
-
-# =========================================================================
 # 1. Security & Permissions
-# =========================================================================
-
 # --- RDS Security Group (Sec 2.8 & 5.2) ---
 resource "aws_security_group" "stt_db_sg" {
   name        = "stt-db-sg"
@@ -30,7 +24,7 @@ resource "aws_security_group" "stt_db_sg" {
 }
 
 # --- IAM Role (Sec 2.1) ---
-resource "aws_iam_role" "stt_service_role" {
+/*resource "aws_iam_role" "stt_service_role" {
   name = "stt-service-role"
 
   assume_role_policy = jsonencode({
@@ -80,12 +74,9 @@ resource "aws_iam_policy" "stt_service_policy" {
 resource "aws_iam_role_policy_attachment" "stt_service_attach" {
   role       = aws_iam_role.stt_service_role.name
   policy_arn = aws_iam_policy.stt_service_policy.arn
-}
+}*/
 
-# =========================================================================
 # 2. S3 Buckets (Sec 2.4)
-# =========================================================================
-
 resource "aws_kms_key" "stt_key" {
   description             = "Key for STT bucket encryption"
   deletion_window_in_days = 10
@@ -128,10 +119,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "stt_storage_lifecycle" {
   }
 }
 
-# =========================================================================
 # 3. RDS Database (Sec 2.8 & 5.2)
-# =========================================================================
-
 resource "aws_db_instance" "stt_db" {
   identifier        = "stt-db"
   allocated_storage = 20
@@ -144,7 +132,7 @@ resource "aws_db_instance" "stt_db" {
   password          = "RAGNAROK9090!"
 
   # Networking
-  db_subnet_group_name   = aws_db_subnet_group.quiz_db_subnet_group.name # Reusing subnet group from quizservice.tf as it uses the same 'data_db' subnets
+  db_subnet_group_name   = aws_db_subnet_group.quiz_db_subnet_group.name 
   vpc_security_group_ids = [aws_security_group.stt_db_sg.id]
 
   # Availability & Durability

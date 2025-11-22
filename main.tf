@@ -1,13 +1,10 @@
 provider "aws" {
-  region                   = "us-east-1"     # e.g., "us-east-1"
-  shared_credentials_files = ["credentials"] # Relative path to your credentials file
-  profile                  = "default"       # Or "default" if you used the default profile
+  region                   = "us-east-1"
+  shared_credentials_files = ["credentials"]
+  profile                  = "default"
 }
 
-
-# ==========  ===============================================================
-# 1. VPC & Network Foundation [cite: 3, 4]
-# =========================================================================
+#1. VPC & Network Foundation [cite: 3, 4]
 
 resource "aws_vpc" "hydra_vpc" {
   cidr_block           = "10.0.0.0/16"
@@ -20,7 +17,6 @@ resource "aws_vpc" "hydra_vpc" {
   }
 }
 
-# Availability Zones [cite: 6]
 data "aws_availability_zones" "available" {
   state = "available"
 }
@@ -30,15 +26,12 @@ resource "aws_internet_gateway" "igw" {
   tags   = { Name = "Project-Hydra-IGW" }
 }
 
-# =========================================================================
-# 2. Subnet Architecture (Segmentation Strategy) 
-# =========================================================================
 
-# --- Public Subnets (ALB & NAT) ---
+
 resource "aws_subnet" "public" {
   count                   = 2
   vpc_id                  = aws_vpc.hydra_vpc.id
-  cidr_block              = "10.0.${count.index + 1}.0/24" # Using low range for Public
+  cidr_block              = "10.0.${count.index + 1}.0/24"
   availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
 
@@ -47,41 +40,34 @@ resource "aws_subnet" "public" {
   }
 }
 
-# --- Private App Layer (Container Cluster) [cite: 44] ---
 resource "aws_subnet" "private_app" {
   count             = 2
   vpc_id            = aws_vpc.hydra_vpc.id
-  cidr_block        = "10.0.${50 + count.index}.0/24" # 10.0.50.0/24 & 10.0.51.0/24
+  cidr_block        = "10.0.${50 + count.index}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = { Name = "private-app-${count.index == 0 ? "a" : "b"}" }
 }
 
-# --- Data Persistence Layer (RDS) [cite: 47] ---
 resource "aws_subnet" "data_db" {
   count             = 2
   vpc_id            = aws_vpc.hydra_vpc.id
-  cidr_block        = "10.0.${60 + count.index}.0/24" # 10.0.60.0/24 & 10.0.61.0/24
+  cidr_block        = "10.0.${60 + count.index}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = { Name = "data-db-${count.index == 0 ? "a" : "b"}" }
 }
 
-# --- Kafka Streaming Layer [cite: 49] ---
 resource "aws_subnet" "kafka_cluster" {
   count             = 2
   vpc_id            = aws_vpc.hydra_vpc.id
-  cidr_block        = "10.0.${70 + count.index}.0/24" # 10.0.70.0/24 & 10.0.71.0/24
+  cidr_block        = "10.0.${70 + count.index}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = { Name = "kafka-cluster-${count.index == 0 ? "a" : "b"}" }
 }
 
-# =========================================================================
-# 3. Routing & Gateways [cite: 13]
-# =========================================================================
 
-# --- NAT Gateways (High Availability: 1 per AZ) [cite: 16] ---
 resource "aws_eip" "nat" {
   count  = 2
   domain = "vpc"
@@ -94,8 +80,6 @@ resource "aws_nat_gateway" "nat_gw" {
   tags          = { Name = "Project-Hydra-NAT-GW-${count.index == 0 ? "A" : "B"}" }
 }
 
-# --- Route Tables ---
-# Public RT: To IGW [cite: 19]
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.hydra_vpc.id
   route {
@@ -111,7 +95,6 @@ resource "aws_route_table_association" "public_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-# Private RTs: To NAT GWs [cite: 20, 21]
 resource "aws_route_table" "private_rt" {
   count  = 2
   vpc_id = aws_vpc.hydra_vpc.id
@@ -122,7 +105,6 @@ resource "aws_route_table" "private_rt" {
   tags = { Name = "Private-RT-AZ-${count.index == 0 ? "A" : "B"}" }
 }
 
-# Associate Private Subnets to Private RTs
 resource "aws_route_table_association" "app_assoc" {
   count          = 2
   subnet_id      = aws_subnet.private_app[count.index].id
@@ -139,9 +121,6 @@ resource "aws_route_table_association" "kafka_assoc" {
   route_table_id = aws_route_table.private_rt[count.index].id
 }
 
-# =========================================================================
-# 4. Security Groups [cite: 72, 77]
-# =========================================================================
 
 resource "aws_security_group" "alb_sg" {
   name        = "alb-sg"
@@ -186,21 +165,18 @@ resource "aws_security_group" "kafka_sg" {
   vpc_id      = aws_vpc.hydra_vpc.id
   description = "Security group for Kafka and Zookeeper"
 
-  # Allow internal communication within the SG (Kafka <-> Zookeeper)
   ingress {
     from_port = 0
     to_port   = 0
     protocol  = "-1"
     self      = true
   }
-  # Allow access from App Cluster (Producers/Consumers)
   ingress {
     from_port       = 9092
     to_port         = 9092
     protocol        = "tcp"
     security_groups = [aws_security_group.app_sg.id]
   }
-  # Allow SSH for management (Internal Only)
   ingress {
     from_port   = 22
     to_port     = 22
@@ -215,18 +191,14 @@ resource "aws_security_group" "kafka_sg" {
   }
 }
 
-# =========================================================================
-# 5. Compute Resources (EC2) [cite: 66, 67]
-# =========================================================================
 
-# Key Pair Management (Auto-generates a key file locally)
 resource "tls_private_key" "pk" {
   algorithm = "RSA"
   rsa_bits  = 2048
 }
 
 resource "aws_key_pair" "kp" {
-  key_name   = "project-hydra-key" # [cite: 81]
+  key_name   = "project-hydra-key"
   public_key = tls_private_key.pk.public_key_openssh
 }
 
@@ -236,7 +208,6 @@ resource "local_file" "ssh_key" {
   file_permission = "0400"
 }
 
-# AMI Lookup (Amazon Linux 2023) [cite: 83]
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -246,20 +217,21 @@ data "aws_ami" "amazon_linux_2023" {
   }
 }
 
-# --- App Nodes (3 Instances) [cite: 73] ---
+# --- App Nodes (3 Instances) ---
 resource "aws_instance" "app_nodes" {
   count                       = 3
   ami                         = data.aws_ami.amazon_linux_2023.id
-  instance_type               = "t3.medium"                                        # 
-  subnet_id                   = element(aws_subnet.private_app[*].id, count.index) # Distributes across AZs
+  instance_type               = "t3.medium"
+  subnet_id                   = element(aws_subnet.private_app[*].id, count.index)
   key_name                    = aws_key_pair.kp.key_name
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  associate_public_ip_address = false # [cite: 79]
+  associate_public_ip_address = false
+
 
   tags = { Name = "App-Node-${count.index + 1}" }
 }
 
-# --- Kafka Brokers (3 Instances) [cite: 70] ---
+# --- Kafka Brokers (3 Instances) ---
 resource "aws_instance" "kafka_brokers" {
   count                       = 3
   ami                         = data.aws_ami.amazon_linux_2023.id
@@ -272,7 +244,7 @@ resource "aws_instance" "kafka_brokers" {
   tags = { Name = "Kafka-Broker-${count.index + 1}" }
 }
 
-# --- Zookeeper Nodes (3 Instances) [cite: 70] ---
+# --- Zookeeper Nodes (3 Instances) ---
 resource "aws_instance" "zookeeper_nodes" {
   count                       = 3
   ami                         = data.aws_ami.amazon_linux_2023.id
@@ -285,11 +257,8 @@ resource "aws_instance" "zookeeper_nodes" {
   tags = { Name = "Zookeeper-${count.index + 1}" }
 }
 
-# =========================================================================
-# 6. Load Balancing [cite: 84]
-# =========================================================================
 
-# --- Public Application Load Balancer (ALB) [cite: 88] ---
+# --- Public Application Load Balancer (ALB) ---
 resource "aws_lb" "alb" {
   name               = "hydra-public-alb"
   internal           = false
@@ -316,7 +285,6 @@ resource "aws_lb_listener" "front_end" {
   }
 }
 
-# Register App Nodes to ALB Target Group
 resource "aws_lb_target_group_attachment" "app_attach" {
   count            = 3
   target_group_arn = aws_lb_target_group.app_tg.arn
@@ -324,16 +292,16 @@ resource "aws_lb_target_group_attachment" "app_attach" {
   port             = 80
 }
 
-# --- Internal Network Load Balancer (NLB) for Kafka [cite: 98] ---
+# --- Internal Network Load Balancer (NLB) for Kafka ---
 resource "aws_lb" "nlb" {
-  name               = "hydra-kafka-nlb" # [cite: 134]
+  name               = "hydra-kafka-nlb"
   internal           = true
   load_balancer_type = "network"
   subnets            = aws_subnet.kafka_cluster[*].id
 }
 
 resource "aws_lb_target_group" "kafka_tg" {
-  name     = "kafka-cluster-tg" # [cite: 128]
+  name     = "kafka-cluster-tg"
   port     = 9092
   protocol = "TCP"
   vpc_id   = aws_vpc.hydra_vpc.id
@@ -350,7 +318,6 @@ resource "aws_lb_listener" "kafka_listener" {
   }
 }
 
-# Register Kafka Brokers to NLB Target Group [cite: 132]
 resource "aws_lb_target_group_attachment" "kafka_attach" {
   count            = 3
   target_group_arn = aws_lb_target_group.kafka_tg.arn
@@ -358,9 +325,7 @@ resource "aws_lb_target_group_attachment" "kafka_attach" {
   port             = 9092
 }
 
-# =========================================================================
-# 7. Outputs [cite: 155, 159]
-# =========================================================================
+# [cite_start]7. Outputs [cite: 155, 159]
 
 output "alb_dns_name" {
   description = "Public URL for the App Cluster"
@@ -370,69 +335,13 @@ output "alb_dns_name" {
 output "nlb_dns_name" {
   description = "Internal URL for Kafka Connection"
   value       = aws_lb.nlb.dns_name
-} 
-
-# =========================================================================
-# 8. IAM & RBAC 
-# =========================================================================
-
-# --- User Management (RBAC) ---
-
-# 1. Create the Developer Group
-resource "aws_iam_group" "hydra_developers" {
-  name = "hydra-developers-group"
 }
 
-# 2. Attach a Policy (Permissions) to the Group
-# Giving them "PowerUserAccess" (allows most things except IAM management)
-resource "aws_iam_group_policy_attachment" "dev_access" {
-  group      = aws_iam_group.hydra_developers.name
-  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
-}
+# 8. IAM (Disabled for Lab)
+# IAM resources are commented out because Vocareum labs do not allow 
+# creating Users, Groups, or Roles.
 
-# 3. Create Users for Members 2 through 6
-resource "aws_iam_user" "team_members" {
-  count = 5
-  name  = "member-${count.index + 2}" # Creates member-2, member-3, etc.
-  tags = {
-    Project = "Hydra"
-    Role    = "Service-Owner"
-  }
-}
-
-# 4. Add Users to the Developer Group
-resource "aws_iam_user_group_membership" "add_to_group" {
-  count = 5
-  user  = aws_iam_user.team_members[count.index].name
-  groups = [
-    aws_iam_group.hydra_developers.name
-  ]
-}
-
-# --- EC2 Instance Roles (Foundational Roles) ---
-
-# Role that allows EC2 instances to talk to AWS services (e.g., SSM, CloudWatch)
-resource "aws_iam_role" "ec2_base_role" {
-  name = "hydra-ec2-base-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "hydra-ec2-instance-profile"
-  role = aws_iam_role.ec2_base_role.name
-}
-
-# =========================================================================
-# 9. RDS: User Management Database (FIXED)
-# =========================================================================
+# 9. RDS: User Management Database
 
 resource "aws_security_group" "rds_sg" {
   name        = "hydra-rds-sg"
@@ -455,10 +364,10 @@ resource "aws_db_subnet_group" "user_db_subnet_group" {
 
 resource "aws_db_instance" "user_db" {
   identifier             = "hydra-user-management-db"
-  allocated_storage      = 20 # FIX: Minimum is 20 GB
+  allocated_storage      = 20
   db_name                = "user_management"
   engine                 = "postgres"
-  engine_version         = "18.1" # FIX: Changed from 16.3 to 16.1
+  engine_version         = "18.1"
   instance_class         = "db.t3.medium"
   username               = "admin_hydra"
   password               = "RAGNAROK9090!"
@@ -466,15 +375,9 @@ resource "aws_db_instance" "user_db" {
   multi_az               = true
   db_subnet_group_name   = aws_db_subnet_group.user_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
-
-
 }
 
-# =========================================================================
 # 10. Network Security ACLs (AWS WAF) 
-# =========================================================================
-
-# 1. Define the Web ACL (Access Control List)
 resource "aws_wafv2_web_acl" "hydra_waf" {
   name        = "hydra-main-acl"
   description = "WAF for Project Hydra ALB"
@@ -490,7 +393,6 @@ resource "aws_wafv2_web_acl" "hydra_waf" {
     sampled_requests_enabled   = true
   }
 
-  # Rule: Block Common Vulnerabilities (AWS Managed Rules)
   rule {
     name     = "AWS-Common-Rule-Set"
     priority = 1
@@ -514,11 +416,7 @@ resource "aws_wafv2_web_acl" "hydra_waf" {
   }
 }
 
-# 2. Associate the ACL with your existing ALB
-# Note: 'aws_lb.alb.arn' refers to the ALB created in your previous script
 resource "aws_wafv2_web_acl_association" "alb_waf_assoc" {
   resource_arn = aws_lb.alb.arn
   web_acl_arn  = aws_wafv2_web_acl.hydra_waf.arn
 }
-
-
