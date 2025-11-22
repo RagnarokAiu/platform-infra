@@ -1,8 +1,3 @@
-provider "aws" {
-  region = "us-east-1"
-  shared_credentials_files =["Credentials"]
- profile="default"
-}
 
 # ---------------------------------------------------------
 # VARIABLES (For Network Configuration)
@@ -161,4 +156,5 @@ resource "aws_db_instance" "doc_reader_db" {
   storage_encrypted       = true            # Requirement: Encryption
   backup_retention_period = 7               # Requirement: Backups (7 days)
   skip_final_snapshot     = true            # Set false for production
+
 }
