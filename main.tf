@@ -458,15 +458,16 @@ resource "aws_db_instance" "user_db" {
   allocated_storage      = 20 # FIX: Minimum is 20 GB
   db_name                = "user_management"
   engine                 = "postgres"
-  engine_version         = "16.1" # FIX: Changed from 16.3 to 16.1
-  instance_class         = "db.t3.micro"
+  engine_version         = "18.1" # FIX: Changed from 16.3 to 16.1
+  instance_class         = "db.t3.medium"
   username               = "admin_hydra"
-  password               = "ChangeMe123!"
-  parameter_group_name   = "default.postgres16"
+  password               = "RAGNAROK9090!"
   skip_final_snapshot    = true
   multi_az               = true
   db_subnet_group_name   = aws_db_subnet_group.user_db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.rds_sg.id]
+
+
 }
 
 # =========================================================================
@@ -519,4 +520,5 @@ resource "aws_wafv2_web_acl_association" "alb_waf_assoc" {
   resource_arn = aws_lb.alb.arn
   web_acl_arn  = aws_wafv2_web_acl.hydra_waf.arn
 }
+
 
