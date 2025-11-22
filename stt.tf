@@ -1,18 +1,7 @@
 # =============================================================================
 # MEMBER 3 - Speech-to-Text Service (Phase 1)
 # =============================================================================
-terraform {
-  required_version = ">= 1.5.0"
-  required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.0" }
-    random = { source = "hashicorp/random", version = "~> 3.0" }
-  }
-}
-provider "aws" {
-  region                   = "us-east-1"       # e.g., "us-east-1"
-  shared_credentials_files = ["./credentials"] # Relative path to your credentials file
-  profile                  = "default"         # Or "default" if you used the default profile
-}
+
 
 # ------------------ INPUTS ------------------
 variable "vpc_id" { type = string }
@@ -139,4 +128,5 @@ resource "aws_iam_role_policy_attachment" "attach" {
 # ------------------ OUTPUTS ------------------
 output "s3_bucket_name" { value = aws_s3_bucket.stt_bucket.id }
 output "db_endpoint"    { value = aws_db_instance.stt_db.endpoint }
+
 output "db_sg_id"       { value = aws_security_group.stt_db_sg.id }
