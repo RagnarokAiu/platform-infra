@@ -84,8 +84,8 @@ resource "aws_db_subnet_group" "stt_subnet_group" {
 resource "aws_db_instance" "stt_db" {
   identifier              = "stt-service-db"
   engine                  = "postgres"
-  engine_version          = "15.7"
-  instance_class          = "db.t3.micro"
+  engine_version          = "18.1"
+  instance_class          = "db.t3.medium"
   allocated_storage       = 20
   max_allocated_storage   = 20
   storage_encrypted       = true
@@ -130,3 +130,4 @@ output "s3_bucket_name" { value = aws_s3_bucket.stt_bucket.id }
 output "db_endpoint"    { value = aws_db_instance.stt_db.endpoint }
 
 output "db_sg_id"       { value = aws_security_group.stt_db_sg.id }
+
